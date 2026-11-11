@@ -40,7 +40,12 @@ enum NuiFunction {
     touchless: 'Cerrar el puño',
     inertial: 'Poner el celular boca abajo',
   ),
-  zoom('Zoom del lienzo', Icons.zoom_in, touch: 'Pellizcar con dos dedos');
+  zoom(
+    'Zoom del lienzo',
+    Icons.zoom_in,
+    touch: 'Pellizcar con dos dedos',
+    touchless: 'Pulgar con medio y acercar o alejar la mano',
+  );
 
   const NuiFunction(
     this.label,

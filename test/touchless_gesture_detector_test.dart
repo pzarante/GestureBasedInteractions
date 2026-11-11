@@ -10,6 +10,7 @@ List<Point3D> fakeHand({
   bool ring = true,
   bool pinky = true,
   bool pinch = false,
+  bool zoomGrip = false,
   double cx = 0.5,
   double cy = 0.5,
   double s = 0.2,
@@ -42,6 +43,8 @@ List<Point3D> fakeHand({
   p[3] = Point3D(cx - 0.8 * s, cy + 0.15 * s, 0);
   p[4] = pinch
       ? Point3D(p[8].x + 0.02 * s, p[8].y, 0)
+      : zoomGrip
+      ? Point3D(p[12].x + 0.02 * s, p[12].y, 0)
       : Point3D(cx - 0.85 * s, cy - 0.05 * s, 0);
   return p;
 }
@@ -88,6 +91,15 @@ void main() {
           1,
         ),
         HandPose.pinch,
+      );
+    });
+    test('pulgar con medio e índice arriba = zoom, no dibujar', () {
+      expect(
+        TouchlessGestureDetector.classify(
+          fakeHand(middle: false, zoomGrip: true),
+          1,
+        ),
+        HandPose.zoomGrip,
       );
     });
   });
@@ -173,5 +185,43 @@ void main() {
       }
       expect(events, isEmpty);
     });
+  });
+
+  test('zoom: acercar la mano agranda el factor y alejarla lo reduce', () {
+    final d = TouchlessGestureDetector();
+    var t = 0;
+    double? factor(double s) => d
+        .process(
+          fakeHand(middle: false, zoomGrip: true, s: s),
+          timestamp: Duration(milliseconds: t += 33),
+          aspect: 1,
+        )
+        .zoomFactor;
+
+    for (var i = 0; i < 6; i++) {
+      factor(0.2); // sostener la pose hasta que sea estable
+    }
+    expect(factor(0.2), closeTo(1, 1e-9));
+    double? f;
+    for (var i = 0; i < 20; i++) {
+      f = factor(0.3); // mano más cerca de la cámara
+    }
+    expect(f, closeTo(1.5, 0.01));
+    for (var i = 0; i < 20; i++) {
+      f = factor(0.1); // mano más lejos
+    }
+    expect(f, closeTo(0.5, 0.01));
+
+    // Soltar la pose termina el zoom.
+    for (var i = 0; i < 6; i++) {
+      f = d
+          .process(
+            fakeHand(),
+            timestamp: Duration(milliseconds: t += 33),
+            aspect: 1,
+          )
+          .zoomFactor;
+    }
+    expect(f, isNull);
   });
 }

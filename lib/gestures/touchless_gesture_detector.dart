@@ -28,6 +28,7 @@ enum HandPose {
   openPalm('Palma abierta'),
   pointing('Señalando (índice)'),
   pinch('Pinch / gesto OK'),
+  zoomGrip('Zoom (pulgar + medio)'),
   victory('Dos dedos arriba'),
   fist('Puño cerrado'),
   other('Otra pose');
@@ -46,6 +47,7 @@ class TouchlessFrameResult {
     required this.pinchRatio,
     this.indexTip,
     this.pinchPoint,
+    this.zoomFactor,
   });
 
   /// Pose estable (filtrada en el tiempo, no la del frame crudo).
@@ -62,6 +64,10 @@ class TouchlessFrameResult {
 
   /// Punto medio entre pulgar e índice en coordenadas de pantalla, 0..1.
   final Offset? pinchPoint;
+
+  /// Mientras se sostiene [HandPose.zoomGrip]: tamaño de la mano ahora
+  /// dividido entre su tamaño al empezar (>1 = mano más cerca = acercar).
+  final double? zoomFactor;
 }
 
 /// Convierte los landmarks de cada frame en poses y gestos.
@@ -96,6 +102,8 @@ class TouchlessGestureDetector {
   HandPose _stable = HandPose.none;
   final List<(Duration, Offset)> _palmTrail = [];
   Duration? _lastSwipe;
+  double? _zoomStartSize;
+  double? _zoomSize; // suavizado contra el temblor del modelo
 
   HandPose get stablePose => _stable;
 
@@ -105,6 +113,8 @@ class TouchlessGestureDetector {
     _stable = HandPose.none;
     _palmTrail.clear();
     _lastSwipe = null;
+    _zoomStartSize = null;
+    _zoomSize = null;
   }
 
   TouchlessFrameResult process(
@@ -150,22 +160,46 @@ class TouchlessGestureDetector {
       if (_stable == HandPose.victory) events.add(TouchlessEvent.victory);
     }
 
+    // Zoom: el tamaño de la mano en la imagen dice qué tan cerca está de la
+    // cámara (más estable que la profundidad z del modelo).
+    if (_stable != HandPose.zoomGrip) {
+      _zoomStartSize = null;
+      _zoomSize = null;
+    } else if (hand != null && hand.length >= 21) {
+      final size = handSize(hand, aspect);
+      final prev = _zoomSize;
+      _zoomSize = prev == null ? size : prev * 0.7 + size * 0.3;
+      _zoomStartSize ??= _zoomSize;
+    }
+    final zoomStart = _zoomStartSize;
+    final zoomFactor = zoomStart == null ? null : _zoomSize! / zoomStart;
+
     return TouchlessFrameResult(
       pose: _stable,
       events: events,
       pinchRatio: ratio,
       indexTip: indexTip,
       pinchPoint: pinchPoint,
+      zoomFactor: zoomFactor,
     );
   }
 
   /// Distancia euclidiana 3D entre punta del pulgar (4) y del índice (8),
   /// normalizada por el tamaño de la mano (muñeca → base del dedo medio)
   /// para que funcione igual cerca o lejos de la cámara.
-  static double pinchRatio(List<Point3D> h, double aspect) {
-    final size = _dist(h[Landmark.wrist], h[Landmark.middleMcp], aspect);
+  static double pinchRatio(List<Point3D> h, double aspect) =>
+      _thumbRatio(h, Landmark.indexTip, aspect);
+
+  /// Tamaño de la mano en la imagen: muñeca → base del dedo medio.
+  static double handSize(List<Point3D> h, double aspect) =>
+      _dist(h[Landmark.wrist], h[Landmark.middleMcp], aspect);
+
+  /// Distancia de la punta del pulgar a la punta [tip], sobre el tamaño de
+  /// la mano.
+  static double _thumbRatio(List<Point3D> h, int tip, double aspect) {
+    final size = handSize(h, aspect);
     if (size < 1e-6) return double.infinity;
-    return _dist(h[Landmark.thumbTip], h[Landmark.indexTip], aspect) / size;
+    return _dist(h[Landmark.thumbTip], h[tip], aspect) / size;
   }
 
   /// Un dedo está extendido si su punta está claramente más lejos de la
@@ -190,6 +224,14 @@ class TouchlessGestureDetector {
     final ring = isExtended(h, Landmark.ringTip, Landmark.ringPip, aspect);
     final pinky = isExtended(h, Landmark.pinkyTip, Landmark.pinkyPip, aspect);
     final ratio = pinchRatio(h, aspect);
+
+    // Pulgar con medio y el índice arriba = modo zoom. Va primero: el medio
+    // doblado hacia el pulgar puede contar como extendido y caer en palma.
+    if (index &&
+        ratio > pinchThreshold &&
+        _thumbRatio(h, Landmark.middleTip, aspect) < pinchThreshold) {
+      return HandPose.zoomGrip;
+    }
 
     final others = [middle, ring, pinky].where((e) => e).length;
     if (ratio < pinchThreshold && others >= 2) return HandPose.pinch;

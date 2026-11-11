@@ -81,6 +81,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
   HandPose _pose = HandPose.none;
   double _pinchRatio = 0;
   Offset? _airCursor; // en coordenadas de la pizarra (pantalla)
+  bool _airZooming = false;
 
   // Canal inercial (acelerómetro del mismo celular).
   final _motionDetector = InertialGestureDetector();
@@ -232,6 +233,14 @@ class _PizarraScreenState extends State<PizarraScreen> {
     _zoomCanvasFocal = _toCanvas(focal);
   }
 
+  /// Escala continua sobre el punto focal; la usan el pellizco táctil y el
+  /// zoom touchless.
+  void _applyZoom(Offset focal, double factor) {
+    final s = (_zoomBase * factor).clamp(1.0, 4.0);
+    _scale = s;
+    _offset = _clampOffset(focal - _zoomCanvasFocal * s, s);
+  }
+
   void _onScaleUpdate(ScaleUpdateDetails d) {
     setState(() {
       switch (_mode) {
@@ -242,9 +251,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
           _version++;
         case _TouchMode.zoom:
           // Pellizco: escala continua sobre el punto focal (FSM: Changed).
-          final s = (_zoomBase * d.scale).clamp(1.0, 4.0);
-          _scale = s;
-          _offset = _clampOffset(d.localFocalPoint - _zoomCanvasFocal * s, s);
+          _applyZoom(d.localFocalPoint, d.scale);
         case _TouchMode.none:
           break;
       }
@@ -278,6 +285,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
         _airCursor = null;
         _pose = HandPose.none;
         _finishAirStroke();
+        _endAirZoom();
       });
       _handDetector.reset();
       return;
@@ -301,6 +309,30 @@ class _PizarraScreenState extends State<PizarraScreen> {
     ((p.dx - 0.15) / 0.7).clamp(0.0, 1.0) * _boardSize.width,
     ((p.dy - 0.15) / 0.7).clamp(0.0, 1.0) * _boardSize.height,
   );
+
+  /// Zoom touchless sobre el centro de la pizarra: la mano no apunta a un
+  /// lugar mientras hace la pose.
+  void _updateAirZoom(double factor) {
+    final center = _boardSize.center(Offset.zero);
+    if (!_airZooming) {
+      _airZooming = true;
+      _zoomBase = _scale;
+      _zoomCanvasFocal = _toCanvas(center);
+    }
+    _applyZoom(center, factor);
+  }
+
+  void _endAirZoom() {
+    if (!_airZooming) return;
+    _airZooming = false;
+    if ((_scale - _zoomBase).abs() > 0.05) {
+      _register(
+        Modality.touchless,
+        NuiFunction.zoom,
+        'Zoom ×${_scale.toStringAsFixed(1)}',
+      );
+    }
+  }
 
   void _finishAirStroke() {
     final s = _airStroke;
@@ -348,6 +380,12 @@ class _PizarraScreenState extends State<PizarraScreen> {
         _version++;
       } else if (_airStroke != null) {
         _finishAirStroke();
+      }
+
+      if (r.zoomFactor case final f?) {
+        _updateAirZoom(f);
+      } else {
+        _endAirZoom();
       }
 
       for (final e in r.events) {
