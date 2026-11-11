@@ -3,10 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'board/board_painter.dart';
+import 'board/board_state.dart';
 import 'gestures/inertial_gesture_detector.dart';
 import 'gestures/touchless_gesture_detector.dart';
 import 'hand_tracking/hand_tracker.dart';
 import 'motion/motion_sensor.dart';
+import 'ui/info_cards.dart';
+import 'ui/motion_meters.dart';
+import 'ui/nui.dart';
 
 void main() => runApp(const PizarraApp());
 
@@ -29,99 +33,6 @@ class PizarraApp extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Modelo: los tres canales físicos y qué gesto dispara cada función.
-// ---------------------------------------------------------------------------
-
-enum Modality {
-  touch('Táctil', Icons.touch_app, Color(0xFF64B5F6)),
-  touchless('Touchless', Icons.back_hand, Color(0xFF81C784)),
-  inertial('Inercial', Icons.screen_rotation, Color(0xFFFFB74D));
-
-  const Modality(this.label, this.icon, this.color);
-  final String label;
-  final IconData icon;
-  final Color color;
-}
-
-enum NuiFunction {
-  draw(
-    'Dibujar',
-    Icons.brush,
-    touch: 'Arrastrar un dedo',
-    touchless: 'Juntar pulgar e índice y mover la mano',
-  ),
-  color(
-    'Cambiar color',
-    Icons.palette,
-    touch: 'Doble toque',
-    touchless: 'Mover la palma abierta a un lado',
-    inertial: 'Inclinar el celular a un lado',
-  ),
-  undo(
-    'Deshacer',
-    Icons.undo,
-    touch: 'Toque con dos dedos',
-    touchless: 'Levantar dos dedos (índice y medio)',
-    inertial: 'Agitar el celular',
-  ),
-  clear(
-    'Borrar todo',
-    Icons.delete_sweep,
-    touch: 'Mantener presionado',
-    touchless: 'Cerrar el puño',
-    inertial: 'Poner el celular boca abajo',
-  ),
-  zoom('Zoom del lienzo', Icons.zoom_in, touch: 'Pellizcar con dos dedos');
-
-  const NuiFunction(
-    this.label,
-    this.icon, {
-    this.touch,
-    this.touchless,
-    this.inertial,
-  });
-  final String label;
-  final IconData icon;
-  final String? touch;
-  final String? touchless;
-  final String? inertial;
-
-  String gestureFor(Modality m) =>
-      switch (m) {
-        Modality.touch => touch,
-        Modality.touchless => touchless,
-        Modality.inertial => inertial,
-      } ??
-      '';
-}
-
-class ActionEvent {
-  ActionEvent(this.modality, this.function, this.detail)
-    : time = DateTime.now();
-  final Modality modality;
-  final NuiFunction function;
-  final String detail;
-  final DateTime time;
-}
-
-const palette = <(String, Color)>[
-  ('Blanco', Color(0xFFF5F5F5)),
-  ('Cian', Color(0xFF4DD0E1)),
-  ('Amarillo', Color(0xFFFFEE58)),
-  ('Rosa', Color(0xFFF06292)),
-  ('Verde', Color(0xFF81C784)),
-  ('Naranja', Color(0xFFFFB74D)),
-];
-
-/// Lo que se muestra en vivo de los sensores (se actualiza ~60 veces/s).
-class MotionView {
-  const MotionView({this.magnitude = 0, this.gamma, this.faceDown = false});
-  final double magnitude;
-  final double? gamma;
-  final bool faceDown;
-}
-
-// ---------------------------------------------------------------------------
 // Pantalla principal
 // ---------------------------------------------------------------------------
 
@@ -136,11 +47,9 @@ enum _TouchMode { none, draw, zoom }
 
 class _PizarraScreenState extends State<PizarraScreen> {
   // Estado de la pizarra (compartido por los tres canales).
-  List<Stroke> _strokes = [];
-  final List<List<Stroke>> _history = [];
+  final _board = BoardState();
   Stroke? _touchStroke;
   Stroke? _airStroke;
-  int _colorIndex = 0;
   double _scale = 1;
   Offset _offset = Offset.zero;
   int _version = 0;
@@ -180,7 +89,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
   bool _sensorsLoading = false;
   String? _sensorsError;
 
-  Color get _color => palette[_colorIndex].$2;
+  Color get _color => _board.color;
 
   @override
   void dispose() {
@@ -194,37 +103,34 @@ class _PizarraScreenState extends State<PizarraScreen> {
   // ===== FUNCIONES: las llaman igual los tres canales =====================
 
   void _commitStroke(Stroke s, Modality m) {
-    if (s.points.isEmpty) return;
-    _history.add(List.of(_strokes));
-    _strokes = [..._strokes, s];
+    if (!_board.commit(s)) return;
     _version++;
     _register(m, NuiFunction.draw, '${s.points.length} puntos');
   }
 
   void _changeColor(int delta, Modality m) {
-    _colorIndex = (_colorIndex + delta) % palette.length;
-    _register(m, NuiFunction.color, palette[_colorIndex].$1);
+    _board.changeColor(delta);
+    _register(m, NuiFunction.color, _board.colorName);
   }
 
   void _undo(Modality m) {
-    if (_history.isEmpty) {
-      _register(m, NuiFunction.undo, 'Nada que deshacer');
-      return;
-    }
-    _strokes = _history.removeLast();
-    _version++;
-    _register(m, NuiFunction.undo, 'Último cambio deshecho');
+    final done = _board.undo();
+    if (done) _version++;
+    _register(
+      m,
+      NuiFunction.undo,
+      done ? 'Último cambio deshecho' : 'Nada que deshacer',
+    );
   }
 
   void _clear(Modality m) {
-    if (_strokes.isEmpty) {
-      _register(m, NuiFunction.clear, 'La pizarra ya está vacía');
-      return;
-    }
-    _history.add(_strokes);
-    _strokes = [];
-    _version++;
-    _register(m, NuiFunction.clear, 'Pizarra borrada');
+    final done = _board.clear();
+    if (done) _version++;
+    _register(
+      m,
+      NuiFunction.clear,
+      done ? 'Pizarra borrada' : 'La pizarra ya está vacía',
+    );
   }
 
   void _register(Modality m, NuiFunction fn, String detail) {
@@ -584,7 +490,8 @@ class _PizarraScreenState extends State<PizarraScreen> {
               padding: const EdgeInsets.only(bottom: 6),
               child: ValueListenableBuilder<MotionView>(
                 valueListenable: _motion,
-                builder: (context, m, _) => _buildMotionStrip(m),
+                builder: (context, m, _) =>
+                    MotionStrip(m, threshold: _motionDetector.shakeThreshold),
               ),
             ),
           Row(
@@ -648,71 +555,6 @@ class _PizarraScreenState extends State<PizarraScreen> {
     );
   }
 
-  /// Versión compacta de los medidores del acelerómetro (una sola fila).
-  Widget _buildMotionStrip(MotionView m) {
-    const maxMag = 30.0;
-    final threshold = _motionDetector.shakeThreshold;
-    final over = m.magnitude > threshold;
-    return Row(
-      children: [
-        SizedBox(
-          width: 92,
-          child: Text(
-            '|a| ${m.magnitude.toStringAsFixed(1)}',
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          ),
-        ),
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, c) {
-              final w = c.maxWidth;
-              return SizedBox(
-                height: 12,
-                child: Stack(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white12,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    Container(
-                      width: w * (m.magnitude / maxMag).clamp(0.0, 1.0),
-                      decoration: BoxDecoration(
-                        color: over
-                            ? Colors.redAccent
-                            : Modality.inertial.color,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    Positioned(
-                      left: w * threshold / maxMag,
-                      top: 0,
-                      bottom: 0,
-                      child: Container(width: 2, color: Colors.redAccent),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-        SizedBox(
-          width: 70,
-          child: Text(
-            m.faceDown
-                ? 'boca ab.'
-                : m.gamma == null
-                ? '—'
-                : '${m.gamma!.toStringAsFixed(0)}°',
-            textAlign: TextAlign.right,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-          ),
-        ),
-      ],
-    );
-  }
-
   void _showInfoSheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -726,9 +568,9 @@ class _PizarraScreenState extends State<PizarraScreen> {
           controller: controller,
           padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
           children: [
-            _buildGestureMap(),
+            GestureMap(active: _flash),
             const SizedBox(height: 12),
-            _buildLog(),
+            EventLog(_log),
           ],
         ),
       ),
@@ -756,11 +598,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
     return LayoutBuilder(
       builder: (context, c) {
         _boardSize = c.biggest;
-        final drawing = [
-          ..._strokes,
-          ?_touchStroke,
-          ?_airStroke,
-        ];
+        final drawing = [..._board.strokes, ?_touchStroke, ?_airStroke];
         return ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: ColoredBox(
@@ -821,7 +659,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
                       bottom: compact ? 12 : null,
                       left: 8,
                       right: 8,
-                      child: Center(child: _buildFlashBanner()),
+                      child: Center(child: FlashBanner(_flash)),
                     ),
                   ],
                 ),
@@ -873,7 +711,7 @@ class _PizarraScreenState extends State<PizarraScreen> {
           ),
           const SizedBox(width: 8),
           Text(
-            palette[_colorIndex].$1,
+            _board.colorName,
             key: const ValueKey('colorName'),
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
@@ -889,51 +727,15 @@ class _PizarraScreenState extends State<PizarraScreen> {
     );
   }
 
-  Widget _buildFlashBanner() {
-    final e = _flash;
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 200),
-      child: e == null
-          ? const SizedBox.shrink()
-          : Container(
-              key: ValueKey(e),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.8),
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: e.modality.color, width: 2),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(e.modality.icon, color: e.modality.color, size: 20),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      '${e.function.gestureFor(e.modality)}  →  '
-                      '${e.function.label}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-
   List<Widget> _buildPanel() {
     return [
       _buildCameraCard(),
       const SizedBox(height: 12),
       _buildPhoneCard(),
       const SizedBox(height: 12),
-      _buildGestureMap(),
+      GestureMap(active: _flash),
       const SizedBox(height: 12),
-      _buildLog(),
+      EventLog(_log),
     ];
   }
 
@@ -1064,7 +866,8 @@ class _PizarraScreenState extends State<PizarraScreen> {
               const SizedBox(height: 8),
               ValueListenableBuilder<MotionView>(
                 valueListenable: _motion,
-                builder: (context, m, _) => _buildMotionMeters(m),
+                builder: (context, m, _) =>
+                    MotionMeters(m, threshold: _motionDetector.shakeThreshold),
               ),
             ] else if (!_sensorsLoading && _sensorsError == null) ...[
               const SizedBox(height: 6),
@@ -1074,190 +877,6 @@ class _PizarraScreenState extends State<PizarraScreen> {
                 style: theme.textTheme.bodySmall,
               ),
             ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMotionMeters(MotionView m) {
-    const maxMag = 30.0;
-    final threshold = _motionDetector.shakeThreshold;
-    final over = m.magnitude > threshold;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '|a| = √(x²+y²+z²) = ${m.magnitude.toStringAsFixed(1)} m/s²',
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-        ),
-        const SizedBox(height: 6),
-        LayoutBuilder(
-          builder: (context, c) {
-            final w = c.maxWidth;
-            return SizedBox(
-              height: 18,
-              child: Stack(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white12,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  Container(
-                    width: w * (m.magnitude / maxMag).clamp(0.0, 1.0),
-                    decoration: BoxDecoration(
-                      color: over ? Colors.redAccent : Modality.inertial.color,
-                      borderRadius: BorderRadius.circular(9),
-                    ),
-                  ),
-                  Positioned(
-                    left: w * threshold / maxMag,
-                    top: 0,
-                    bottom: 0,
-                    child: Container(width: 3, color: Colors.redAccent),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Umbral de agitación: ${threshold.toStringAsFixed(0)} m/s²',
-          style: const TextStyle(fontSize: 12, color: Colors.white60),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          m.faceDown
-              ? 'Boca abajo'
-              : 'Inclinación: ${m.gamma == null ? '—' : '${m.gamma!.toStringAsFixed(0)}°'}',
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGestureMap() {
-    final theme = Theme.of(context);
-    final active = _flash;
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Gesto → función', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            for (final fn in NuiFunction.values)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: active?.function == fn
-                      ? active!.modality.color.withValues(alpha: 0.25)
-                      : theme.colorScheme.surfaceContainerHighest.withValues(
-                          alpha: 0.4,
-                        ),
-                  border: Border.all(
-                    color: active?.function == fn
-                        ? active!.modality.color
-                        : Colors.transparent,
-                    width: 2,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(fn.icon, size: 18),
-                        const SizedBox(width: 6),
-                        Text(
-                          fn.label,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    for (final m in Modality.values)
-                      if (fn.gestureFor(m).isNotEmpty)
-                        _gestureLine(m, fn.gestureFor(m)),
-                  ],
-                ),
-              ),
-            Text(
-              'Touchless: señalar con el índice mueve el cursor sin dibujar.',
-              style: theme.textTheme.bodySmall,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _gestureLine(Modality m, String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2),
-      child: Row(
-        children: [
-          Icon(m.icon, size: 15, color: m.color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(fontSize: 13, color: Colors.white70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLog() {
-    final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Registro de eventos', style: theme.textTheme.titleMedium),
-            const SizedBox(height: 6),
-            if (_log.isEmpty)
-              Text(
-                'Aún no se ha detectado ningún gesto.',
-                style: theme.textTheme.bodySmall,
-              ),
-            for (final e in _log.take(8))
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(e.modality.icon, size: 16, color: e.modality.color),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        '${e.modality.label}: ${e.function.gestureFor(e.modality)}'
-                        ' → ${e.function.label} (${e.detail})',
-                        style: const TextStyle(fontSize: 12.5),
-                      ),
-                    ),
-                    Text(
-                      '${e.time.hour.toString().padLeft(2, '0')}:'
-                      '${e.time.minute.toString().padLeft(2, '0')}:'
-                      '${e.time.second.toString().padLeft(2, '0')}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
       ),
