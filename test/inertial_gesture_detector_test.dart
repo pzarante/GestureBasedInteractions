@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:expo_paunat/gestures/inertial_gesture_detector.dart';
@@ -26,6 +28,23 @@ void main() {
       events.addAll(
         d.process(MotionSample(ax: ax, ay: 0, az: 0), ms(t += 60)).events,
       );
+    }
+    expect(events, [InertialEvent.shake]);
+  });
+
+  test('agitar en arco (|a| nunca baja del umbral) también es shake', () {
+    // Mano real: x va de +18 a -18 a 4 Hz y la curva del arco empuja en y
+    // justo cuando x pasa por cero, así que |a| no vuelve al reposo.
+    final d = InertialGestureDetector();
+    final events = <InertialEvent>[];
+    for (var i = 0; i < 60; i++) {
+      final phase = 2 * math.pi * 4 * i / 60;
+      final s = MotionSample(
+        ax: 18 * math.sin(phase),
+        ay: 10 * math.cos(phase).abs(),
+        az: 0,
+      );
+      events.addAll(d.process(s, ms(i * 1000 ~/ 60)).events);
     }
     expect(events, [InertialEvent.shake]);
   });

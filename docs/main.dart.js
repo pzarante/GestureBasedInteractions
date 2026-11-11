@@ -7193,13 +7193,12 @@ _.c=c
 _.d=d},
 U5:function U5(a){var _=this
 _.y=a
-_.z=!1
-_.as=_.Q=null
-_.at=0
-_.ax=null
-_.ay=!1
-_.ch=null
-_.CW=!1},
+_.Q=_.z=null
+_.as=0
+_.at=null
+_.ax=!1
+_.ay=null
+_.ch=!1},
 U6:function U6(a,b){this.a=a
 this.b=b},
 aj8(a,b){var s=A.a38(a[0],a[9],b)
@@ -36302,38 +36301,36 @@ A.lW.prototype={
 F(){return"InertialEvent."+this.b}}
 A.U4.prototype={}
 A.U5.prototype={
-aa_(a,b){var s,r,q,p,o,n,m,l,k,j,i,h=this,g=A.c([],t.kJ),f=a.a,e=a.b,d=a.c,c=Math.sqrt(f*f+e*e+d*d)
-if(c>12){h.as=b
-if(!h.z){s=h.z=!0
-r=[f,e,d]
-q=r[0]
-for(p=0;p<3;++p){o=r[p]
-if(Math.abs(o)>Math.abs(q))q=o}n=q>=0?1:-1
-f=h.y
-if(f.length!==0?B.b.ga8(f).b!==n:s)f.push(new A.ao(b,n))}}else if(c<7.199999999999999)h.z=!1
-f=h.y
-B.b.cB(f,new A.U6(h,b))
-e=h.Q
-if(!(e!=null&&b.a-e.a<12e5)&&f.length>=3){g.push(B.Bh)
-h.Q=b
-B.b.J(f)}f=h.as
-m=f!=null&&b.a-f.a<7e5
-l=a.d
-if(l!=null){f=Math.abs(l)
-k=f>150
-if(k&&!m){f=h.ch
-if(f==null)f=h.ch=b
-if(!h.CW&&b.a-f.a>=6e5){h.CW=!0
-g.push(B.Bk)}}else if(f<120){h.ch=null
-h.CW=!1}}else k=!1
-j=a.e
-if(j!=null&&!m&&!k){if(j>35)i=1
-else i=j<-35?-1:0
-if(i!==0){if(h.at!==i){h.at=i
-h.ax=b
-h.ay=!1}else if(!h.ay&&b.a-h.ax.a>=25e4){h.ay=!0
-g.push(i>0?B.Bj:B.Bi)}}else if(Math.abs(j)<15){h.at=0
-h.ay=!1}}return new A.U4(c,g,j,k)}}
+aa_(a,b){var s,r,q,p,o,n,m,l,k,j,i=this,h=A.c([],t.kJ),g=a.a,f=a.b,e=a.c,d=Math.sqrt(g*g+f*f+e*e)
+if(d>12){i.Q=b
+s=[g,f,e]
+r=s[0]
+for(q=0;q<3;++q){p=s[q]
+if(Math.abs(p)>Math.abs(r))r=p}o=r>=0?1:-1
+g=i.y
+if(g.length===0||B.b.ga8(g).b!==o)g.push(new A.ao(b,o))}g=i.y
+B.b.cB(g,new A.U6(i,b))
+f=i.z
+if(!(f!=null&&b.a-f.a<12e5)&&g.length>=3){h.push(B.Bh)
+i.z=b
+B.b.J(g)}g=i.Q
+n=g!=null&&b.a-g.a<7e5
+m=a.d
+if(m!=null){g=Math.abs(m)
+l=g>150
+if(l&&!n){g=i.ay
+if(g==null)g=i.ay=b
+if(!i.ch&&b.a-g.a>=6e5){i.ch=!0
+h.push(B.Bk)}}else if(g<120){i.ay=null
+i.ch=!1}}else l=!1
+k=a.e
+if(k!=null&&!n&&!l){if(k>35)j=1
+else j=k<-35?-1:0
+if(j!==0){if(i.as!==j){i.as=j
+i.at=b
+i.ax=!1}else if(!i.ax&&b.a-i.at.a>=25e4){i.ax=!0
+h.push(j>0?B.Bj:B.Bi)}}else if(Math.abs(k)<15){i.as=0
+i.ax=!1}}return new A.U4(d,h,k,l)}}
 A.U6.prototype={
 $1(a){return this.b.a-a.a.a>9e5},
 $S:293}
@@ -36517,13 +36514,12 @@ var $async$rj=A.T(function(a,b){if(a===1)return A.P(b,r)
 for(;;)switch(s){case 0:if(p.p2){A.ahR()
 o=p.ok
 B.b.J(o.y)
-o.z=!1
-o.as=o.Q=null
-o.at=0
-o.ax=null
-o.ay=!1
-o.ch=null
-o.CW=!1
+o.Q=o.z=null
+o.as=0
+o.at=null
+o.ax=!1
+o.ay=null
+o.ch=!1
 p.p1.sp(B.qI)
 p.ai(new A.a8h(p))
 s=1

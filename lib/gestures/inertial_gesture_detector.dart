@@ -71,7 +71,6 @@ class InertialGestureDetector {
   final Duration faceDownHold;
 
   final List<(Duration, int)> _peaks = []; // (tiempo, signo del pico)
-  bool _abovePeak = false;
   Duration? _lastShake;
   Duration? _lastStrongMotion;
 
@@ -84,7 +83,6 @@ class InertialGestureDetector {
 
   void reset() {
     _peaks.clear();
-    _abovePeak = false;
     _lastShake = null;
     _lastStrongMotion = null;
     _tiltArmedSide = 0;
@@ -105,21 +103,18 @@ class InertialGestureDetector {
     // ---------------- Agitar ----------------
     if (m > shakeThreshold) {
       _lastStrongMotion = t;
-      if (!_abovePeak) {
-        _abovePeak = true;
-        // Signo del eje dominante: indica hacia dónde va este pico.
-        final axes = [s.ax, s.ay, s.az];
-        var dominant = axes[0];
-        for (final a in axes) {
-          if (a.abs() > dominant.abs()) dominant = a;
-        }
-        final sign = dominant >= 0 ? 1 : -1;
-        if (_peaks.isEmpty || _peaks.last.$2 != sign) {
-          _peaks.add((t, sign));
-        }
+      // Signo del eje dominante: indica hacia dónde va este pico. Un pico
+      // nuevo se cuenta solo al cambiar de sentido; no se espera a que |a|
+      // baje, porque al agitar en arco los otros ejes la mantienen alta.
+      final axes = [s.ax, s.ay, s.az];
+      var dominant = axes[0];
+      for (final a in axes) {
+        if (a.abs() > dominant.abs()) dominant = a;
       }
-    } else if (m < shakeThreshold * 0.6) {
-      _abovePeak = false;
+      final sign = dominant >= 0 ? 1 : -1;
+      if (_peaks.isEmpty || _peaks.last.$2 != sign) {
+        _peaks.add((t, sign));
+      }
     }
     _peaks.removeWhere((p) => t - p.$1 > shakeWindow);
     final cooling = _lastShake != null && t - _lastShake! < shakeCooldown;
