@@ -1,64 +1,61 @@
-# Gesture Based Interactions
+# Gesture-Based Interactions
+### Por: Paula Núñez y Natalia Carpintero
 
-- [Demo web](https://pzarante.github.io/GestureBasedInteractions/)
-- [Aprender Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Codelab de Flutter](https://docs.flutter.dev/get-started/codelab)
-- [Documentación de Flutter](https://docs.flutter.dev/)
+- **Video de la exposición:** [Canva](https://canva.link/62s2oo2jzow3z23)
+- **[Demo web](https://pzarante.github.io/GestureBasedInteractions/)**
 
-Aplicación experimental desarrollada con Flutter para explorar interacciones gestuales usando la pantalla táctil, la cámara y los sensores de movimiento del dispositivo.
+Una pizarra hecha en **Flutter** que se controla solo con gestos mediante tres canales distintos. Es la demo de la presentación *Gesture-Based Interaction* de Programación Móvil.
 
-## Características
+## ¿Qué hace?
 
-- Interacción táctil con gestos e inercia.
-- Seguimiento de manos mediante la cámara.
-- Lectura de sensores de movimiento.
-- Visualización interactiva de los datos y estados detectados.
-- Ejecución en navegador y dispositivos compatibles con Flutter.
+Los tres canales llaman a las **mismas funciones** —dibujar, deshacer, cambiar color, borrar todo y hacer zoom—, así que la pizarra responde igual sin importar de dónde venga el gesto. Por eso es un sistema **multimodal**.
 
-## Requisitos
+## Gestos por canal
 
-- [Flutter](https://docs.flutter.dev/get-started/install) instalado.
-- Un navegador compatible para ejecutar la versión web.
-- Para probar cámara y sensores desde un celular, el celular y la computadora deben estar en la misma red Wi-Fi.
+| Función | Táctil | Inercial | Touchless |
+| --- | --- | --- | --- |
+| Dibujar | Arrastrar un dedo | No aplica | Pinza (pulgar + índice) y mover |
+| Zoom | Pellizcar | No aplica | Pulgar + medio, acercar o alejar |
+| Deshacer | Tocar con dos dedos | Agitar el celular | Índice + medio arriba |
+| Cambiar color | Doble toque | Inclinar a un lado | Palma abierta moviéndola a un lado |
+| Borrar todo | Mantener presionado | Celular boca abajo | Cerrar el puño |
 
-## Instalación y ejecución
+## Cómo funciona cada canal
 
-```bash
-flutter pub get
-flutter run -d chrome
+Todos siguen el mismo camino: **entrada → gesto → llamada → dibujo**.
+
+- **Táctil:** `Listener` y `GestureDetector` de Flutter reciben los toques y reconocen los gestos. El toque con dos dedos se reconoce mediante los eventos táctiles de bajo nivel.
+- **Inercial:** el celular envía lecturas de aceleración y orientación aproximadamente 60 veces por segundo. Agitar se detecta mediante la magnitud de la aceleración `√(x²+y²+z²)` sobre un umbral de `12 m/s²`, mientras que inclinar y poner el celular boca abajo se detectan mediante los ángulos `gamma` y `beta`.
+- **Touchless:** [MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker) encuentra 21 puntos de la mano usando la cámara, directamente en el dispositivo. Cada pose se reconoce midiendo distancias entre puntos, normalizadas según el tamaño de la mano, y debe mantenerse varios frames seguidos para evitar falsos positivos.
+
+## Estructura
+
+```text
+lib/
+  main.dart                              # Pizarra y llamadas a las acciones
+  gestures/
+    inertial_gesture_detector.dart       # Agitar, inclinar y boca abajo
+    touchless_gesture_detector.dart      # Poses de la mano
+web/
+  motion_sensor.js                       # Sensores de movimiento del navegador
+  hand_tracker.js                        # MediaPipe y cámara
 ```
 
-Para probar la aplicación desde un celular, el script prepara una compilación web, configura HTTPS local y muestra un código QR:
+## Cómo probarla
 
-```bash
-./iniciar_demo.sh
-```
+1. Para una prueba básica en el computador, instala las dependencias y ejecuta la aplicación en Chrome:
 
-Después, abre la dirección indicada en el celular y acepta el aviso del certificado. HTTPS es necesario para que el navegador permita el acceso a la cámara y a los sensores.
+   ```bash
+   flutter pub get
+   flutter run -d chrome
+   ```
 
-Si ya existe una compilación web, puedes iniciar el modo rápido con:
+2. Para probar el canal touchless, abre la demo en Chrome y permite el acceso a la **cámara**.
+3. Para probar el canal inercial desde un celular, ejecuta `./iniciar_demo.sh`. El script compila la aplicación, configura HTTPS local y muestra un código QR. Abre la dirección indicada en el celular y acepta el aviso del certificado.
+4. El canal táctil funciona directamente con mouse, pantalla táctil o trackpad.
 
-```bash
-./iniciar_demo.sh --rapido
-```
+HTTPS es necesario para que el navegador permita el acceso a la cámara y a los sensores desde el celular.
 
-## Compilar para GitHub Pages
+## Tecnologías
 
-```bash
-./construir_github_pages.sh
-```
-
-El resultado se genera en `docs/`, que puede publicarse como la fuente de GitHub Pages del repositorio.
-
-## Estructura principal
-
-- `lib/board`: lienzo y estado de la interacción.
-- `lib/gestures`: detectores de gestos táctiles y sin contacto.
-- `lib/hand_tracking`: seguimiento de manos.
-- `lib/motion`: lectura de sensores de movimiento.
-- `lib/ui`: componentes y visualizaciones de la interfaz.
-- `tool/servidor.dart`: servidor HTTPS local para las pruebas desde móvil.
-
-## Licencia
-
-Este proyecto se encuentra en desarrollo y está destinado a fines educativos y de experimentación.
+Flutter · Dart · MediaPipe Hand Landmarker · API de sensores de movimiento y orientación del navegador
