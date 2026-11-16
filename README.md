@@ -1,8 +1,8 @@
 # Gesture-Based Interactions
 ### Por: Paula Núñez y Natalia Carpintero
 
-- **Video de la exposición:** [Canva](https://canva.link/62s2oo2jzow3z23)
-- **[Demo web](https://pzarante.github.io/GestureBasedInteractions/)**
+- **Video de la exposición:** https://canva.link/62s2oo2jzow3z23
+- **Link de la Demo:** https://pzarante.github.io/GestureBasedInteractions/
 
 Una pizarra hecha en **Flutter** que se controla solo con gestos mediante tres canales distintos. Es la demo de la presentación *Gesture-Based Interaction* de Programación Móvil.
 
